@@ -122,17 +122,64 @@ Each mob is coordinated separately. Failed or invalid path providers are discard
 
 ## Adding Patrick to a mod
 
-The library isn't published to a public Maven repository yet. For now, build it locally and add the resulting JAR to your development classpath and your mod's runtime dependencies.
+Use the [V1.0.0 release](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/releases/tag/V1.0.0) through JitPack. The release targets Minecraft 26.3 and Java 25. The JitPack version is the Git tag **`V1.0.0`**, not the mod version `1.0.0+26.3`.
 
-The Fabric mod ID is `patrick_star_api`. Declare it as a required dependency in your mod metadata. For a Fabric Amper `mod.yaml` consumer, that looks like:
+### Fabric Loom (Gradle Kotlin DSL)
+
+Add JitPack to `settings.gradle.kts` (merge this into your existing repository configuration):
+
+~~~kotlin
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+~~~
+
+Then add Patrick to `build.gradle.kts`:
+
+~~~kotlin
+dependencies {
+    implementation("com.github.howShouldIChooseMyUsername:Patrick-Star-API:V1.0.0")
+}
+~~~
+
+For Minecraft 26.3's non-remapping Fabric Loom, use `implementation`. Older remapping Loom projects typically use `modImplementation` instead (this release is built for 26.3).
+
+**Repository mode note:** `FAIL_ON_PROJECT_REPOS` rejects repositories added by a project or by plugins such as Loom. If your Fabric project adds its own repositories, omit the `dependencyResolutionManagement` block above and add `maven("https://jitpack.io")` to your existing `repositories` block in `build.gradle.kts` instead.
+
+Declare Patrick as a required mod in your `fabric.mod.json`:
+
+~~~json
+"depends": {
+    "patrick_star_api": ">=1.0.0"
+}
+~~~
+
+### Fabric Amper (`mod.yaml` / `mod.yml`)
+
+Keep your Fabric Amper `settings.gradle.kts` bootstrap (see [this project's example](settings.gradle.kts)). Add JitPack and Patrick to your existing `mod.yaml` or `mod.yml`:
 
 ~~~yaml
 mod:
   depends:
-    patrick_star_api: "*"
+    patrick_star_api: ">=1.0.0"
+
+repositories:
+  - fabric
+  - mavenCentral
+  - maven: "https://jitpack.io"
+
+dependencies:
+  - maven: "com.github.howShouldIChooseMyUsername:Patrick-Star-API:V1.0.0"
+    kind: mod
 ~~~
 
-This declares the **runtime dependency**; it doesn't automatically provide the Java classes at compile time. You'll also need a dependency on the API JAR in your build setup.
+Merge these fields into your existing YAML; don't replace its other `mod`, `repositories`, or `dependencies` entries. Fabric Amper configures the build from `settings.gradle.kts` and the YAML file, so **no `build.gradle.kts` is needed**.
+
+In both setups, the Maven dependency supplies the classes to compile against, while `patrick_star_api` in `depends` tells Fabric Loader that the Patrick mod must also be installed at runtime. Do not bundle a second copy of Patrick into your mod.
 
 ## Building
 
