@@ -48,12 +48,12 @@ final class NavigationSessionContractTest {
 
     @Test
     void legacyBuilderTranslatesIntoEquivalentOrderedStepsAndReachability() {
-        PatricPath legacy = PatricPath.builder(new BlockPos(30, 64, 30))
+        PatrickPath legacy = PatrickPath.builder(new BlockPos(30, 64, 30))
                 .waypoint(new Vec3(20.5, 64, 20.5))
                 .speed(1.25)
                 .reachable(false)
                 .build();
-        PathDirector.Plan plan = Patric.toPlan(legacy);
+        PathDirector.Plan plan = Patrick.toPlan(legacy);
         assertNotNull(plan);
         assertEquals(false, plan.reachableOverride());
         assertEquals(2, plan.steps().size());
@@ -62,6 +62,6 @@ final class NavigationSessionContractTest {
         assertEquals(Vec3.atBottomCenterOf(new BlockPos(30, 64, 30)),
                 ((PathDirector.Point) plan.steps().get(1)).point());
         assertEquals(1.25, ((PathDirector.Point) plan.steps().get(1)).speed());
-        assertNull(Patric.toPlan(null));
+        assertNull(Patrick.toPlan(null));
     }
 }

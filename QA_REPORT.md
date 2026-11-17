@@ -193,3 +193,27 @@ SHA-256:
 - GitHub 릴리스 설명은 영문 `RELEASE_NOTES.md`에, 최종 JAR 체크섬은 릴리스 자산 `SHA256SUMS.txt`에 보관한다. 로컬 Maven 게시만 실행했으며 외부 Maven 배포는 별도 검증되지 않았다.
 - 본 릴리스 이전에 실행한 A/B/C 서버 4/4, 기존 요청 18/18, Alpha/Beta 독립 모드 7/7은 코드 로직의 근거다. 이번 버전 변경은 모드 메타데이터와 빌드/패키징 식별자만 수정했다.
 - V1.0.0의 실제 Fabric Loader 환경에서 `patrick_star_api 1.0.0+26.3` 모드 로딩, MC 26.3 dedicated server `Done` 로그 및 콘솔 `stop` 정상 종료를 확인했다. 이 추가 실행은 기존 경로 이동 게이트의 재실행이 아닌 **서버 부트 스모크**다.
+
+## 등록 수명 주기 API v3 — 2026-11-17 (로컬 개발 변경)
+
+- 사용자 결정에 맞춰 `Patrick.register(PatrickPathRegistry)`는 경로 완료 후에도 유지되는 지속형 기본 행동, `Patrick.oneShot(PatrickPathRegistry)`은 단발 이동 요청으로 구분했다. `Patrick.unregister(PatrickPathRegistry)`는 동일한 등록 핸들을 받으며, `.deferOneShot(boolean)` 기본값은 `false`다. 여섯 `create(Mob, ...)` 오버로드와 기존 `.priority(int)`/`.lock(int)` API 시그니처는 유지했다.
+- `.deferOneShot(false)`에서는 현재 패시브의 lock 만료 뒤 One-Shot이 선점 가능하며, `.deferOneShot(true)`에서는 현재 패시브 경로가 완료될 때까지 One-Shot을 보류한다. One-Shot끼리는 priority → reachable → distance → FIFO를 적용하고, 완료된 One-Shot은 제거한다. 정적 지속형은 도착 후 휴식하고 Mob이 다시 멀어지면 활성화하며, 동적 지속형 경로는 성공 10틱·실패 40틱 이후 재평가한다.
+- **실제 dedicated server MC 26.3 / Fabric Loader 0.20.1 / Java 25**에서 새 opt-in `PatrickLifecycleRuntimeProbe`로 실물 Cow 네 시나리오를 실행: `run/patrick-lifecycle-runtime-results.txt`에 **`PLIFECYCLE SUMMARY PASS=4 FAIL=0`** 기록. 검증 항목은 (1) 낮은 priority 단발 요청의 패시브 선점·목적지 도착·패시브 재개·핸들 해제·Goal 제거, (2) defer=true 보류·경로 완료 후 순서 양보, (3) 동시 동순위 단발 두 건의 가까운 목적지 우선 실행 및 큐 종료, (4) 동적 패시브 팩토리의 두 번째 경로 재계산·등록 해제다. 테스트 전용 마커 `run/patrick-lifecycle-runtime.enabled`는 실행 이후 삭제했으며 전용 서버 `stop` 정상 종료를 확인했다.
+- **실제 버그 수정 근거:** 후보 도달성 평가 중 vanilla `navigation.createPath()`는 `getTargetPos()`를 바꿔도 기존 `getPath()` 객체는 유지할 수 있다. 이전 구현의 `releaseNavigation()`이 경로 객체 및 목표 좌표 두 조건의 일치를 요구하여 선점 때 소유 경로 정리를 건너뛰었고, 단발 이동 명령이 새 목적지로 시작됐어도 Mob이 이전 목적지로 계속 이동했다. 소유한 `Path` 객체의 identity를 기준으로 정지·외부 교체를 판정하도록 고친 뒤 같은 Cow 시나리오를 재실행해 **4/4 PASS**했다. 외부 모드가 소유한 다른 경로 객체는 정지하지 않는다.
+- 최신 `\.\gradlew.bat clean build --no-daemon --console=plain` **BUILD SUCCESSFUL**, Java compile, JUnit **20/20 PASS** (PublicApiContractTest 7, PathPolicyTest 6, NavigationOverloadTest 4, NavigationSessionContractTest 3), `verifyFabricAmperJar`, jar·sourcesJar 모두 통과. `git diff --check` 통과. 테스트 코드를 새 oneShot 의미로 맞췄으나 **기존 opt-in 18/18, 독립 Alpha/Beta 7/7, A/B/C 4/4는 이번 소스 변경 후 dedicated server 재실행하지 않았음**. 이 결과들은 이전 V1.0.0 기반의 역사적 검증이다.
+- **배포 구분:** 이번 v3 변경은 로컬 작업 트리에만 적용했다. 기존 공개 GitHub/JitPack 태그 `V1.0.0`, 기존 릴리스 JAR, GitHub `origin/main`은 수정·푸시하지 않았다. JitPack V1.0.0의 `register`는 여전히 기존 단발 의미로, 현재 로컬 빌드와 동작이 다르므로 배포 시 호환성 및 버전 전략 검토가 필요하다.
+
+### 공개 Java API 오타 수정 — 2026-11-17
+
+- 사용자 요청으로 개발 버전 공개 클래스 이름을 `Patric` → `Patrick`, `PatricPath` → `PatrickPath`, `PatricPathRegistry` → `PatrickPathRegistry`로 일괄 수정했다. 소스 파일명·선언·내부 경로 제공자·실물 Mob 프로브·독립 소비자 테스트 모드·JUnit·README·specs.md를 같은 이름으로 정리했다. **Java 패키지 `comvyne.patrickstar.api`와 Fabric mod ID `patrick_star_api`는 그대로 유지했다.** 역사적 `RELEASE_NOTES.md`/V1.0.0 배포 바이너리는 수정하지 않았다.
+- 이름 변경 이후 `\.\gradlew.bat clean build --no-daemon --console=plain` **BUILD SUCCESSFUL**, JUnit **20/20 PASS**, `verifyFabricAmperJar` PASS. 생성 JAR의 공개 API 항목은 `Patrick.class`, `PatrickPath.class`, `PatrickPath$Builder.class`, `PatrickPathRegistry.class`로 확인했고 오래된 `Patric*.class`는 포함되지 않았다.
+- 이름 변경 후 새 Java 클래스들로 opt-in dedicated server 검증을 **다시 실행**했다. 실제 Cow의 요청 중재 4개 시나리오 재실행 결과 `run/patrick-lifecycle-runtime-results.txt`에 **`PLIFECYCLE SUMMARY PASS=4 FAIL=0`** (2026-11-17 기록). 서버는 콘솔 `stop`으로 정상 종료하고 테스트 마커는 삭제했다.
+- GitHub `origin/main`과 공개 JitPack `V1.0.0`은 변경하지 않았다. **기존 V1.0.0 사용자는 이전 공개 클래스명을 사용해야 하고, 이름 변경 및 새로운 지속/단발 API는 후속 릴리스에서 제공해야 한다.**
+
+## V2.0.0 릴리스 검증 — 2026-11-17
+
+- 사용자 요청에 따라 `mod.yaml`의 모드 버전을 **`2.0.0+26.3`**으로 올리고 새 Git 태그 **`V2.0.0`** 기준 README/JitPack 좌표, Fabric Loader 의존 예제 `patrick_star_api >=2.0.0`, 독립 소비자 검증 JAR의 의존조건 `>=2.0.0+26.3`을 업데이트했다. `settings.gradle.kts`의 Fabric Amper 부트스트랩 v0.1.3은 그대로다.
+- `.\gradlew.bat clean build --no-daemon --console=plain` **BUILD SUCCESSFUL**: `compileJava`, `compileTestJava`, JUnit **20/20 PASS** (7+6+4+3), `verifyFabricAmperJar`, `jar`, `sourcesJar` 및 `build`. `integration-consumers/pack-test-mods.ps1 -NoInstall`로 독립 Alpha/Beta 소비자 JAR 2개도 컴파일된 테스트 클래스로 새로 생성했다.
+- **최종 변경 버전의 실제 MC26.3 전용 서버에서 모두 새로 실행:** `run/patrick-lifecycle-runtime-results.txt` **PLIFECYCLE 4/4 PASS**, `run/patrick-overload-runtime-results.txt` **POVERLOAD 4/4 PASS**, `run/patrick-dual-consumer-results.txt` **PCROSS 7/7 PASS** (실제 Loader가 `patrick_probe_alpha`/`patrick_probe_beta` 별도 ID로 로드), `run/patrick-runtime-smoke-results.txt` **PTEST 18/18 PASS**. 모두 FAIL=0으로 확인했으며, 서버 시작 로그에서 `patrick_star_api 2.0.0+26.3` 로드를 확인했다. 서버는 각각 콘솔 `stop`으로 정상 종료했고, 테스트 활성화 마커와 `run/mods`에 설치했던 별도 소비자 JAR 2개는 제거했다.
+- 배포 JAR: `build/libs/patrick-star-api-2.0.0+26.3.jar`, SHA-256 **CFC592400EFA9771F340B1EC1B0743020DCB6206463FA5A335786983CF520D08**. 소스 JAR: `build/libs/patrick-star-api-2.0.0+26.3-sources.jar`, SHA-256 **99F93392E1DDEC8B1788F8DF1ABCB66376CC5062F7394D39BBDED19F9156C0CD**. 런타임 JAR는 루트 `fabric.mod.json` 한 개와 새 `Patrick.class`/`PatrickPath.class`/`PatrickPathRegistry.class`를 포함하며 이전 `Patric*.class`는 포함하지 않는다.
+- **비호환성:** 기존 V1.0.0의 `Patric` 공개 타입, 단발 의미의 `register`를 그대로 쓰는 소비자 모드는 V2.0.0에 맞게 import와 등록 코드를 수정하고 재컴파일해야 한다. Fabric 모드 ID `patrick_star_api`와 Java 패키지 `comvyne.patrickstar.api`는 유지한다.

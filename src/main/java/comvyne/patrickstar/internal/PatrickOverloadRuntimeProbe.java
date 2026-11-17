@@ -1,8 +1,8 @@
 package comvyne.patrickstar.internal;
 
 import comvyne.patrickstar.api.NavigationSession;
-import comvyne.patrickstar.api.Patric;
-import comvyne.patrickstar.api.PatricPathRegistry;
+import comvyne.patrickstar.api.Patrick;
+import comvyne.patrickstar.api.PatrickPathRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
@@ -237,11 +237,11 @@ final class PatrickOverloadRuntimeProbe {
             case 1 -> {
                 // Submit farther first. Equal priority means the later, closer
                 // Vec3 request must still execute before the BlockPos request.
-                PatricPathRegistry farther = Patric.create(cow, pos(21, 8)).priority(200);
-                PatricPathRegistry closer = Patric.create(cow,
+                PatrickPathRegistry farther = Patrick.create(cow, pos(21, 8)).priority(200);
+                PatrickPathRegistry closer = Patrick.create(cow,
                         Vec3.atBottomCenterOf(pos(12, 8))).priority(200);
-                boolean farAccepted = Patric.register(farther);
-                boolean nearAccepted = Patric.register(closer);
+                boolean farAccepted = Patrick.oneShot(farther);
+                boolean nearAccepted = Patrick.oneShot(closer);
                 accepted = farAccepted && nearAccepted;
                 LOG.info("{} A REGISTER far={} near={}", PREFIX, farAccepted, nearAccepted);
             }
@@ -251,12 +251,12 @@ final class PatrickOverloadRuntimeProbe {
                     throw new IllegalStateException("Vanilla createPath to (8,17) returned no reachable path");
                 }
                 originalPathCursor = originalPath.getNextNodeIndex();
-                accepted = Patric.register(Patric.create(cow, originalPath).priority(200));
+                accepted = Patrick.oneShot(Patrick.create(cow, originalPath).priority(200));
                 LOG.info("{} B-PATH REGISTER {} cursor={} nodes={}", PREFIX, accepted,
                         originalPathCursor, originalPath.getNodeCount());
             }
             case 3 -> {
-                accepted = Patric.register(Patric.create(cow, () -> {
+                accepted = Patrick.oneShot(Patrick.create(cow, () -> {
                     supplierCalls++;
                     LOG.info("{} B-SUPPLIER FACTORY count={}", PREFIX, supplierCalls);
                     return cow.getNavigation().createPath(pos(17, 8), 0);
@@ -269,7 +269,7 @@ final class PatrickOverloadRuntimeProbe {
                 if (firstPath == null || !firstPath.canReach() || firstPath.getNodeCount() == 0) {
                     throw new IllegalStateException("Vanilla createPath for session follow returned no path");
                 }
-                accepted = Patric.register(Patric.create(cow, (entity, session) -> {
+                accepted = Patrick.oneShot(Patrick.create(cow, (entity, session) -> {
                     sessionCalls++;
                     capturedSession = session;
                     LOG.info("{} C-SESSION CALLBACK count={}", PREFIX, sessionCalls);
@@ -282,7 +282,7 @@ final class PatrickOverloadRuntimeProbe {
             default -> throw new IllegalStateException("Unexpected stage " + stage);
         }
         if (!accepted) {
-            throw new IllegalStateException("public Patric.register returned false");
+            throw new IllegalStateException("public Patrick.oneShot returned false");
         }
     }
 

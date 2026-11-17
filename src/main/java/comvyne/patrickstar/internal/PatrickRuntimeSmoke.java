@@ -1,8 +1,8 @@
 package comvyne.patrickstar.internal;
 
-import comvyne.patrickstar.api.Patric;
-import comvyne.patrickstar.api.PatricPath;
-import comvyne.patrickstar.api.PatricPathRegistry;
+import comvyne.patrickstar.api.Patrick;
+import comvyne.patrickstar.api.PatrickPath;
+import comvyne.patrickstar.api.PatrickPathRegistry;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -133,67 +133,67 @@ final class PatrickRuntimeSmoke {
         switch (stage) {
             case 1 -> {
                 // Three independent consumers submit requests in reverse priority order.
-                boolean a = Patric.register(Patric.create(mob, e -> {
+                boolean a = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return route(baseX, baseZ + 6, 1.15);
                 }).priority(100));
-                boolean b = Patric.register(Patric.create(mob, e -> {
+                boolean b = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksB.incrementAndGet();
                     return route(baseX + 6, baseZ + 6, 1.15);
                 }).priority(200));
-                boolean c = Patric.register(Patric.create(mob, e -> {
+                boolean c = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksC.incrementAndGet();
                     return route(baseX + 6, baseZ, 1.15);
                 }).priority(300));
                 record(a && b && c, "register-three", "accepted=" + a + "," + b + "," + c);
             }
             case 2 -> {
-                boolean accepted = Patric.register(Patric.create(mob, e ->
-                        PatricPath.builder(pos(baseX + 6, baseZ + 6))
+                boolean accepted = Patrick.oneShot(Patrick.create(mob, e ->
+                        PatrickPath.builder(pos(baseX + 6, baseZ + 6))
                                 .waypoint(Vec3.atBottomCenterOf(pos(baseX + 6, baseZ)))
                                 .speed(1.15).reachable(true).build()
                 ).priority(123));
                 record(accepted, "waypoint-register", "accepted=" + accepted);
             }
             case 3 -> {
-                boolean a = Patric.register(Patric.create(mob, e -> {
+                boolean a = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return null;
                 }).priority(300));
-                boolean b = Patric.register(Patric.create(mob, e -> {
+                boolean b = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksB.incrementAndGet();
                     throw new IllegalStateException("intentional runtime-smoke failure");
                 }).priority(200));
-                boolean c = Patric.register(Patric.create(mob, e -> {
+                boolean c = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksC.incrementAndGet();
                     return route(baseX + 6, baseZ, 1.15);
                 }).priority(100));
                 record(a && b && c, "fault-isolation-register", "accepted=" + a + "," + b + "," + c);
             }
             case 4 -> {
-                boolean accepted = Patric.register(Patric.create(mob, e -> {
+                boolean accepted = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return route(baseX + 14, baseZ, 0.72);
                 }).priority(100).lock(LOCK_MILLIS));
                 record(accepted, "lock-low-register", "accepted=" + accepted);
             }
             case 5 -> {
-                boolean accepted = Patric.register(Patric.create(mob, e -> {
+                boolean accepted = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return route(baseX + 10, baseZ, 0.75);
                 }).priority(100).lock(0));
                 record(accepted, "invalid-high-low-register", "accepted=" + accepted);
             }
             case 6 -> {
-                PatricPathRegistry neverRegistered = Patric.create(mob, e -> {
+                PatrickPathRegistry neverRegistered = Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return route(baseX + 5, baseZ, 1.0);
                 });
-                record(neverRegistered != null && !Patric.register(null),
+                record(neverRegistered != null && !Patrick.register(null),
                         "create-without-register", "created but intentionally not submitted");
             }
             case 7 -> {
-                boolean accepted = Patric.register(Patric.create(mob, e -> {
+                boolean accepted = Patrick.oneShot(Patrick.create(mob, e -> {
                     callbacksA.incrementAndGet();
                     return route(baseX + 14, baseZ, 0.65);
                 }).priority(100));
@@ -288,7 +288,7 @@ final class PatrickRuntimeSmoke {
                 if (!highRegistered && targetIs(target, baseX + 14, baseZ)) {
                     first = true;
                     lockStartNanos = System.nanoTime();
-                    highRegistered = Patric.register(Patric.create(mob, e -> {
+                    highRegistered = Patrick.oneShot(Patrick.create(mob, e -> {
                         callbacksB.incrementAndGet();
                         return route(baseX, baseZ + 8, 1.15);
                     }).priority(500));
@@ -322,11 +322,11 @@ final class PatrickRuntimeSmoke {
                 if (!highRegistered && targetIs(target, baseX + 10, baseZ)) {
                     originalNavigationPath = mob.getNavigation().getPath();
                     invalidHighRegisteredAt = stageTicks;
-                    boolean nullAccepted = Patric.register(Patric.create(mob, e -> {
+                    boolean nullAccepted = Patrick.oneShot(Patrick.create(mob, e -> {
                         callbacksB.incrementAndGet();
                         return null;
                     }).priority(500));
-                    boolean throwAccepted = Patric.register(Patric.create(mob, e -> {
+                    boolean throwAccepted = Patrick.oneShot(Patrick.create(mob, e -> {
                         callbacksC.incrementAndGet();
                         throw new IllegalStateException("invalid-high consumer");
                     }).priority(400));
@@ -373,7 +373,7 @@ final class PatrickRuntimeSmoke {
                     LOG.info("PTEST STAGE7 discard moving mob id={}", mob.getId());
                 }
                 if (first && stageTicks >= 5) {
-                    boolean rejected = !Patric.register(Patric.create(mob, e -> route(baseX, baseZ, 1.0)));
+                    boolean rejected = !Patrick.register(Patrick.create(mob, e -> route(baseX, baseZ, 1.0)));
                     long ourGoals = mob.getGoalSelector().getAvailableGoals().stream()
                             .filter(g -> g.getGoal().getClass().getName()
                                     .equals("comvyne.patrickstar.internal.PathDirector$MoveGoal"))
@@ -409,8 +409,8 @@ final class PatrickRuntimeSmoke {
         return cow;
     }
 
-    private PatricPath route(int x, int z, double speed) {
-        return PatricPath.builder(pos(x, z)).speed(speed).reachable(true).build();
+    private PatrickPath route(int x, int z, double speed) {
+        return PatrickPath.builder(pos(x, z)).speed(speed).reachable(true).build();
     }
 
     private BlockPos pos(int x, int z) {

@@ -1,8 +1,8 @@
 package comvyne.patrickstar.consumers;
 
-import comvyne.patrickstar.api.Patric;
-import comvyne.patrickstar.api.PatricPath;
-import comvyne.patrickstar.api.PatricPathRegistry;
+import comvyne.patrickstar.api.Patrick;
+import comvyne.patrickstar.api.PatrickPath;
+import comvyne.patrickstar.api.PatrickPathRegistry;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -80,16 +80,16 @@ public final class BetaConsumerMod implements ModInitializer {
 
                 state.attempted = true;
                 BlockPos destination = state.start.offset(0, 0, 8);
-                PatricPathRegistry request = Patric.create(cow, mob -> {
+                PatrickPathRegistry request = Patrick.create(cow, mob -> {
                     state.factoryCalls++;
                     mob.addTag(FACTORY_TAG);
                     LOG.info("PCONSUMER BETA FACTORY count={}", state.factoryCalls);
-                    return PatricPath.builder(destination)
+                    return PatrickPath.builder(destination)
                             .speed(1.15)
                             .reachable(true)
                             .build();
                 }).priority(500);
-                boolean accepted = Patric.register(request);
+                boolean accepted = Patrick.oneShot(request);
                 if (accepted) {
                     cow.addTag(REGISTERED_TAG);
                 }

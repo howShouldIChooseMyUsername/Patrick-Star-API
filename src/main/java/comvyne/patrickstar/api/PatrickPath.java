@@ -13,13 +13,13 @@ import java.util.Optional;
  * User-supplied ordered waypoint route, independent of Minecraft's internal Node class.
  * An absent reachability override is computed by the server when the request is evaluated.
  */
-public final class PatricPath {
+public final class PatrickPath {
     private final BlockPos destination;
     private final List<Vec3> waypoints;
     private final double speed;
     private final Boolean reachableOverride;
 
-    private PatricPath(Builder builder) {
+    private PatrickPath(Builder builder) {
         this.destination = builder.destination.immutable();
         this.waypoints = List.copyOf(builder.waypoints);
         this.speed = builder.speed;
@@ -90,8 +90,8 @@ public final class PatricPath {
             return this;
         }
 
-        public PatricPath build() {
-            return new PatricPath(this);
+        public PatrickPath build() {
+            return new PatrickPath(this);
         }
     }
 }

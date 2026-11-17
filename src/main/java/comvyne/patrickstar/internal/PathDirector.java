@@ -21,6 +21,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Predicate;
 import java.util.function.Function;
 
 /**
@@ -34,6 +35,8 @@ public final class PathDirector {
     private static final int MAX_REQUESTS_PER_MOB = 256;
     private static final int MAX_STEPS_PER_PLAN = 1025;
     private static final int MAX_NODES_PER_NATIVE_PATH = 4096;
+    private static final int PASSIVE_SUCCESS_RETRY_TICKS = 10;
+    private static final int PASSIVE_FAILURE_RETRY_TICKS = 40;
     private static final Map<Mob, Controller> CONTROLLERS = new IdentityHashMap<>();
     private static long nextTicket;
     private static boolean initialized;
@@ -41,10 +44,15 @@ public final class PathDirector {
     private PathDirector() {
     }
 
-    /** A lazy route provider; dynamic providers are evaluated again after suspension. */
-    public record Request(Function<Mob, Plan> factory, boolean refreshOnResume) {
+    /** A lazy route provider; dynamic providers can refresh between route cycles. */
+    public record Request(Function<Mob, Plan> factory, boolean refreshOnResume,
+                          boolean refreshAfterCompletion) {
         public Request {
             Objects.requireNonNull(factory, "factory");
+        }
+
+        public Request(Function<Mob, Plan> factory, boolean refreshOnResume) {
+            this(factory, refreshOnResume, true);
         }
     }
 
@@ -145,9 +153,11 @@ public final class PathDirector {
         });
     }
 
-    public static boolean enqueue(Mob mob, Request request,
-                                  int priority, int lockMillis) {
+    public static boolean enqueue(Mob mob, Object handle, Request request,
+                                  int priority, int lockMillis,
+                                  boolean persistent, boolean deferOneShot) {
         if (mob == null || request == null
+                || handle == null
                 || priority < 0 || priority > 65_535 || lockMillis < 0
                 || !(mob.level() instanceof ServerLevel serverLevel)
                 || !serverLevel.getServer().isSameThread()
@@ -161,8 +171,32 @@ public final class PathDirector {
                 || controller.tasks.size() >= MAX_REQUESTS_PER_MOB) {
             return false;
         }
-        controller.tasks.add(new Task(request, priority, lockMillis, nextTicket++));
+        controller.tasks.add(new Task(handle, request, priority, lockMillis,
+                persistent, deferOneShot, nextTicket++));
         return true;
+    }
+
+    /** Called on the owning server thread; only removes the exact submitted handle. */
+    public static boolean cancel(Mob mob, Object handle) {
+        if (mob == null || handle == null
+                || !(mob.level() instanceof ServerLevel level)
+                || !level.getServer().isSameThread()) {
+            return false;
+        }
+        Controller controller = CONTROLLERS.get(mob);
+        if (controller == null || controller.discarded || controller.sourceLevel != level) {
+            return false;
+        }
+        for (Task task : List.copyOf(controller.tasks)) {
+            if (task.handle == handle) {
+                if (controller.running == task) {
+                    controller.releaseNavigation(task);
+                    controller.running = null;
+                }
+                return controller.tasks.remove(task);
+            }
+        }
+        return false;
     }
 
     private static void maintenance() {
@@ -195,10 +229,15 @@ public final class PathDirector {
     }
 
     private static final class Task {
+        final Object handle;
         final Request request;
         final int priority;
         final int lockMillis;
+        final boolean persistent;
+        final boolean deferOneShot;
         final long ticket;
+        long nextEligibleTick;
+        Vec3 lastCompletedPosition;
         Plan plan;
         boolean evaluated;
         boolean rejected;
@@ -215,10 +254,14 @@ public final class PathDirector {
         int externalOverrideAttempts;
         long lockDeadlineNanos;
 
-        Task(Request request, int priority, int lockMillis, long ticket) {
+        Task(Object handle, Request request, int priority, int lockMillis,
+             boolean persistent, boolean deferOneShot, long ticket) {
+            this.handle = handle;
             this.request = request;
             this.priority = priority;
             this.lockMillis = lockMillis;
+            this.persistent = persistent;
+            this.deferOneShot = deferOneShot;
             this.ticket = ticket;
         }
 
@@ -245,6 +288,16 @@ public final class PathDirector {
             this.sourceLevel = (ServerLevel) mob.level();
         }
 
+        boolean eligible(Task task) {
+            return !task.persistent || (sourceLevel.getGameTime() >= task.nextEligibleTick
+                    && (task.lastCompletedPosition == null
+                    || mob.position().distanceToSqr(task.lastCompletedPosition) > 4.0));
+        }
+
+        boolean hasRunnableWork() {
+            return running != null || tasks.stream().anyMatch(this::eligible);
+        }
+
         void dispose() {
             try {
                 releaseNavigation(running);
@@ -266,20 +319,35 @@ public final class PathDirector {
             discarded = true;
         }
 
-        void evaluatePending(int higherThanPriority) {
+        void evaluatePending(Predicate<Task> filter) {
             // Providers are called outside any synchronized section. A callback may
             // register another task, so iterate a snapshot of the current queue.
             for (Task task : List.copyOf(tasks)) {
-                if (task.evaluated || task.rejected || task.priority <= higherThanPriority
+                if (task.evaluated || task.rejected || !filter.test(task) || !eligible(task)
                         || discarded || !tasks.contains(task)) {
                     continue;
                 }
                 task.evaluated = true;
                 try {
                     Plan provided = task.request.factory().apply(mob);
-                    if (provided == null || !validPlan(provided)
+                    if (!tasks.contains(task)) {
+                        continue; // A provider may unregister itself while evaluated.
+                    }
+                    if (provided == null) {
+                        if (task.persistent) {
+                            deferFailedPassive(task);
+                        } else {
+                            task.rejected = true;
+                        }
+                        continue;
+                    }
+                    if (!validPlan(provided)
                             || sourceLevel.getEntity(mob.getId()) != mob || !mob.isAlive()) {
-                        task.rejected = true;
+                        if (task.persistent) {
+                            deferFailedPassive(task);
+                        } else {
+                            task.rejected = true;
+                        }
                         LOG.warn("Navigation provider returned an invalid or unloaded route for mob {}.",
                                 mob.getUUID());
                         continue;
@@ -311,7 +379,11 @@ public final class PathDirector {
                         }
                     }
                 } catch (RuntimeException ex) {
-                    task.rejected = true;
+                    if (task.persistent) {
+                        deferFailedPassive(task);
+                    } else {
+                        task.rejected = true;
+                    }
                     LOG.warn("Navigation provider failed for mob {} ({}).",
                             mob.getUUID(), ex.getClass().getSimpleName());
                 }
@@ -320,6 +392,12 @@ public final class PathDirector {
             if (running != null && !tasks.contains(running)) {
                 running = null;
             }
+        }
+
+        void deferFailedPassive(Task task) {
+            task.plan = null;
+            task.evaluated = false;
+            task.nextEligibleTick = sourceLevel.getGameTime() + PASSIVE_FAILURE_RETRY_TICKS;
         }
 
         boolean validPlan(Plan plan) {
@@ -396,9 +474,10 @@ public final class PathDirector {
             return Double.isFinite(total) ? total : Double.MAX_VALUE;
         }
 
-        Task choose() {
+        Task choose(Predicate<Task> filter) {
             return PathPolicy.choose(
-                    tasks.stream().filter(task -> task.evaluated && !task.rejected
+                    tasks.stream().filter(task -> filter.test(task) && eligible(task)
+                            && task.evaluated && !task.rejected
                             && task.plan != null).toList(),
                     task -> new PathPolicy.Score(task.priority, task.reachable,
                             remainingDistance(task), task.ticket)
@@ -406,45 +485,56 @@ public final class PathDirector {
         }
 
         void selectOrPreempt() {
-            // Never evaluate pending providers during a protected lock period
-            // or if a pending request cannot possibly preempt the current one.
             if (running != null) {
                 long now = System.nanoTime();
-                boolean higherWaiting = tasks.stream()
-                        .anyMatch(task -> task != running && PathPolicy.canPreempt(
-                                running.priority, running.lockDeadlineNanos, task.priority, now));
-                if (!higherWaiting) {
+                Task current = running;
+                if (now - current.lockDeadlineNanos < 0) {
                     return;
                 }
-                // Crucially, a newly arrived higher-priority provider can fail
-                // or return null. Validate candidates BEFORE releasing the
-                // existing navigation, otherwise an invalid request restarts
-                // a perfectly healthy running path.
-                evaluatePending(running.priority);
-                Task candidate = choose();
-                if (candidate == null || candidate == running
-                        || candidate.priority <= running.priority) {
+
+                // A one-shot interrupts a passive route unless that passive
+                // defers one-shots; its priority only ranks against other shots.
+                // Existing explicit locks still protect the currently owned path.
+                Predicate<Task> permitted = candidate -> candidate != current
+                        && PathPolicy.canInterrupt(current.persistent, current.deferOneShot,
+                        current.priority, current.lockDeadlineNanos,
+                        candidate.persistent, candidate.priority, now);
+                if (tasks.stream().noneMatch(task -> permitted.test(task) && eligible(task))) {
                     return;
                 }
-                Task previous = running;
-                suspendTask(previous);
+                // Validate the candidates before disturbing the active navigation.
+                evaluatePending(permitted);
+                if (running != current || !tasks.contains(current)) {
+                    return;
+                }
+                Task candidate = choose(task -> permitted.test(task) && !task.persistent);
+                if (candidate == null) {
+                    candidate = choose(task -> permitted.test(task) && task.persistent);
+                }
+                if (candidate == null) {
+                    return;
+                }
+                suspendTask(current);
                 running = null;
                 activate(candidate);
                 return;
             }
 
-            evaluatePending(-1);
+            evaluatePending(task -> !task.persistent);
             if (tasks.isEmpty()) {
                 running = null;
                 return;
             }
-            Task candidate = choose();
+            // One-shots that are ready run ahead of persistent baseline behaviors.
+            Task candidate = choose(task -> !task.persistent);
+            if (candidate == null) {
+                evaluatePending(task -> task.persistent);
+                candidate = choose(task -> task.persistent);
+            }
             if (candidate == null) {
                 return;
             }
-            if (running == null) {
-                activate(candidate);
-            }
+            activate(candidate);
         }
 
         void activate(Task task) {
@@ -471,8 +561,11 @@ public final class PathDirector {
                     task.nativeNextNode = Math.max(task.nativeNextNode, owned.getNextNodeIndex());
                 }
                 PathNavigation navigation = mob.getNavigation();
-                if (navigation.getPath() == owned
-                        && Objects.equals(navigation.getTargetPos(), task.expectedTarget)) {
+                // createPath() can change the navigation's targetPos while
+                // leaving its active Path object untouched. Path identity is
+                // the ownership check: do not leave a stale owned path moving
+                // when a new request takes over.
+                if (navigation.getPath() == owned) {
                     navigation.stop();
                 }
             }
@@ -496,9 +589,29 @@ public final class PathDirector {
         }
 
         void finishRunning() {
+            finishRunning(false);
+        }
+
+        void finishRunning(boolean succeeded) {
             if (running != null) {
-                releaseNavigation(running);
-                tasks.remove(running);
+                Task done = running;
+                releaseNavigation(done);
+                if (done.persistent && tasks.contains(done)) {
+                    done.plan = null;
+                    done.evaluated = false;
+                    done.nextStep = 0;
+                    done.nativeNextNode = 0;
+                    done.moving = false;
+                    done.externalOverrideAttempts = 0;
+                    done.nextEligibleTick = sourceLevel.getGameTime()
+                            + (succeeded ? PASSIVE_SUCCESS_RETRY_TICKS : PASSIVE_FAILURE_RETRY_TICKS);
+                    // A static destination needn't re-run until the Mob moves away.
+                    // Dynamic suppliers/builders produce a new route after cooldown.
+                    done.lastCompletedPosition = succeeded && !done.request.refreshAfterCompletion()
+                            ? mob.position() : null;
+                } else {
+                    tasks.remove(done);
+                }
                 running = null;
             }
         }
@@ -576,9 +689,7 @@ public final class PathDirector {
                 task.noProgressTicks = 0;
                 return;
             }
-            BlockPos activeTarget = navigation.getTargetPos();
-            if (navigation.getPath() != task.ownedNativePath
-                    || !Objects.equals(activeTarget, task.expectedTarget)) {
+            if (navigation.getPath() != task.ownedNativePath) {
                 // Another owner replaced the path. Do not stop their navigation.
                 if (++task.externalOverrideAttempts > 2) {
                     finishRunning();
@@ -630,7 +741,7 @@ public final class PathDirector {
 
         void advanceStep(Task task) {
             if (task.atFinalStep()) {
-                finishRunning();
+                finishRunning(true);
                 return;
             }
             releaseNavigation(task);
@@ -662,7 +773,7 @@ public final class PathDirector {
         public boolean canUse() {
             return !controller.discarded && controller.mob.isAlive()
                     && controller.mob.level() == controller.sourceLevel
-                    && !controller.tasks.isEmpty();
+                    && controller.hasRunnableWork();
         }
 
         @Override

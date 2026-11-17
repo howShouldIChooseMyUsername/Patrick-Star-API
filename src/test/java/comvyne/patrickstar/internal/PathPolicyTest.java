@@ -59,6 +59,45 @@ final class PathPolicyTest {
     }
 
     @Test
+    void ordinaryOneShotInterruptsPassiveRegardlessOfPriorityButRespectsLock() {
+        long deadline = 1_500_000_000L;
+        assertFalse(PathPolicy.canInterrupt(true, false, 60000, deadline,
+                false, 1, deadline - 1));
+        assertTrue(PathPolicy.canInterrupt(true, false, 60000, deadline,
+                false, 1, deadline));
+        assertFalse(PathPolicy.canInterrupt(true, true, 1, deadline,
+                false, 65535, deadline + 1));
+        assertTrue(PathPolicy.canInterrupt(true, true, 1, deadline,
+                true, 10, deadline + 1));
+        assertFalse(PathPolicy.canInterrupt(true, true, 10, deadline,
+                true, 10, deadline + 1));
+    }
+
+    @Test
+    void oneShotsArbitrateAgainstOtherOneShotsAndDoNotYieldToPersistentRequests() {
+        long deadline = 10;
+        assertFalse(PathPolicy.canInterrupt(false, false, 300, deadline,
+                true, 65535, deadline));
+        assertFalse(PathPolicy.canInterrupt(false, false, 300, deadline,
+                false, 299, deadline));
+        assertFalse(PathPolicy.canInterrupt(false, false, 300, deadline,
+                false, 300, deadline));
+        assertTrue(PathPolicy.canInterrupt(false, false, 300, deadline,
+                false, 301, deadline));
+
+        List<Request> shots = new ArrayList<>(List.of(
+                request("far", 10, true, 50, 0),
+                request("unreachable", 10, false, 1, 1),
+                request("near", 10, true, 5, 2)
+        ));
+        assertEquals("near", pick(shots).owner());
+        shots.remove(pick(shots));
+        assertEquals("far", pick(shots).owner());
+        shots.remove(pick(shots));
+        assertEquals("unreachable", pick(shots).owner());
+    }
+
+    @Test
     void priorityBoundsAndBadDistancesAreNotValidScores() {
         assertDoesNotThrow(() -> new PathPolicy.Score(0, true, 0, 0));
         assertDoesNotThrow(() -> new PathPolicy.Score(65535, false, 0, 0));

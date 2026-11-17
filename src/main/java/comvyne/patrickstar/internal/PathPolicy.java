@@ -31,4 +31,22 @@ public final class PathPolicy {
                                      int newPriority, long nowNanos) {
         return newPriority > currentPriority && nowNanos - lockDeadlineNanos >= 0;
     }
+
+    /**
+     * A one-shot can interrupt a non-deferring passive request regardless of
+     * relative priority, but never breaks an explicit lock. While a one-shot
+     * runs, only a higher-priority one-shot can interrupt it.
+     */
+    public static boolean canInterrupt(boolean currentPersistent, boolean currentDeferOneShot,
+                                       int currentPriority, long lockDeadlineNanos,
+                                       boolean candidatePersistent, int candidatePriority,
+                                       long nowNanos) {
+        if (nowNanos - lockDeadlineNanos < 0) {
+            return false;
+        }
+        if (!currentPersistent) {
+            return !candidatePersistent && candidatePriority > currentPriority;
+        }
+        return candidatePersistent ? candidatePriority > currentPriority : !currentDeferOneShot;
+    }
 }

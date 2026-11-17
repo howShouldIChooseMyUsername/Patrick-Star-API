@@ -14,40 +14,40 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * The two public service entry points for Patrick Star API.
+ * Navigation request creation, continuous registration and one-shot dispatch.
  * All navigation requests are processed on the owning server thread.
  */
-public final class Patric {
-    private Patric() {
+public final class Patrick {
+    private Patrick() {
     }
 
     /**
-     * Creates an unregistered, one-shot navigation request.
+     * Creates an unregistered navigation request.
      * The callback is evaluated when the server arbitrates this request.
      */
-    public static PatricPathRegistry create(Mob targetEntity, Function<Mob, PatricPath> pathFactory) {
-        return new PatricPathRegistry(
+    public static PatrickPathRegistry create(Mob targetEntity, Function<Mob, PatrickPath> pathFactory) {
+        return new PatrickPathRegistry(
                 Objects.requireNonNull(targetEntity, "targetEntity"),
                 Objects.requireNonNull(pathFactory, "pathFactory")
         );
     }
 
     /** Register a vanilla destination with default speed 1.0 and no path builder. */
-    public static PatricPathRegistry create(Mob targetEntity, BlockPos destination) {
+    public static PatrickPathRegistry create(Mob targetEntity, BlockPos destination) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         BlockPos pos = Objects.requireNonNull(destination, "destination").immutable();
-        return new PatricPathRegistry(targetEntity,
+        return new PatrickPathRegistry(targetEntity,
                 new PathDirector.Request(mob -> new PathDirector.Plan(
-                        List.of(new PathDirector.Point(Vec3.atBottomCenterOf(pos), 1.0)), null), false));
+                        List.of(new PathDirector.Point(Vec3.atBottomCenterOf(pos), 1.0)), null), false, false));
     }
 
     /** Register a precise destination with default speed 1.0 and no path builder. */
-    public static PatricPathRegistry create(Mob targetEntity, Vec3 destination) {
+    public static PatrickPathRegistry create(Mob targetEntity, Vec3 destination) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         Vec3 point = Objects.requireNonNull(destination, "destination");
-        return new PatricPathRegistry(targetEntity,
+        return new PatrickPathRegistry(targetEntity,
                 new PathDirector.Request(mob -> new PathDirector.Plan(
-                        List.of(new PathDirector.Point(point, 1.0)), null), false));
+                        List.of(new PathDirector.Point(point, 1.0)), null), false, false));
     }
 
     /**
@@ -55,25 +55,25 @@ public final class Patric {
      * and plays a defensive copy to avoid changing the caller's cursor.
      * Prefer the Supplier overload if the Mob may move before activation.
      */
-    public static PatricPathRegistry create(Mob targetEntity, Path path) {
+    public static PatrickPathRegistry create(Mob targetEntity, Path path) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         Path given = Objects.requireNonNull(path, "path");
         // Capture a defensive native snapshot at create time: callers may
         // continue manipulating their original Path before arbitration.
         PathDirector.Native snapshot = new PathDirector.Native(given, 1.0);
-        return new PatricPathRegistry(targetEntity,
+        return new PatrickPathRegistry(targetEntity,
                 new PathDirector.Request(mob -> new PathDirector.Plan(
-                        List.of(snapshot), snapshot.path().canReach()), false));
+                        List.of(snapshot), snapshot.path().canReach()), false, false));
     }
 
     /**
      * Generate a fresh native Path when the request is considered for
      * arbitration. This supplier is also invoked on resume after preemption.
      */
-    public static PatricPathRegistry create(Mob targetEntity, Supplier<Path> pathFactory) {
+    public static PatrickPathRegistry create(Mob targetEntity, Supplier<Path> pathFactory) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         Supplier<Path> factory = Objects.requireNonNull(pathFactory, "pathFactory");
-        return new PatricPathRegistry(targetEntity, new PathDirector.Request(mob -> {
+        return new PatrickPathRegistry(targetEntity, new PathDirector.Request(mob -> {
             Path path = factory.get();
             return path == null ? null : new PathDirector.Plan(
                     List.of(new PathDirector.Native(path, 1.0)), path.canReach());
@@ -87,12 +87,12 @@ public final class Patric {
      *
      * The callback may be re-invoked after a preempted request resumes.
      */
-    public static PatricPathRegistry create(Mob targetEntity,
+    public static PatrickPathRegistry create(Mob targetEntity,
                                             BiConsumer<Mob, NavigationSession> pathAction) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         BiConsumer<Mob, NavigationSession> action =
                 Objects.requireNonNull(pathAction, "pathAction");
-        return new PatricPathRegistry(targetEntity, new PathDirector.Request(mob -> {
+        return new PatrickPathRegistry(targetEntity, new PathDirector.Request(mob -> {
             NavigationSession session = new NavigationSession();
             try {
                 action.accept(mob, session);
@@ -104,7 +104,7 @@ public final class Patric {
     }
 
     /** Translate legacy waypoint input to the same internal execution plan. */
-    static PathDirector.Plan toPlan(PatricPath path) {
+    static PathDirector.Plan toPlan(PatrickPath path) {
         if (path == null) {
             return null;
         }
@@ -117,15 +117,37 @@ public final class Patric {
     }
 
     /**
-     * @return true if accepted for scheduling; not a statement of route success.
+     * Register a persistent navigation behavior. It remains registered across
+     * route completions until explicitly unregistered or its Mob unloads.
+     * @return true if accepted for scheduling, not a statement of route success
      */
-    public static boolean register(PatricPathRegistry registration) {
+    public static boolean register(PatrickPathRegistry registration) {
+        return submit(registration, true);
+    }
+
+    /**
+     * Queue one navigation run, removed after it succeeds or fails. One-shots
+     * use the same path factories, priority, lock and arbitration as register.
+     * @return true if accepted for scheduling, not a statement of route success
+     */
+    public static boolean oneShot(PatrickPathRegistry registration) {
+        return submit(registration, false);
+    }
+
+    /** Cancel an active or queued registration or one-shot using its original handle. */
+    public static boolean unregister(PatrickPathRegistry registration) {
+        return registration != null && registration.registered()
+                && PathDirector.cancel(registration.target(), registration);
+    }
+
+    private static boolean submit(PatrickPathRegistry registration, boolean persistent) {
         if (registration == null || registration.registered()) {
             return false;
         }
         boolean accepted = PathDirector.enqueue(
-                registration.target(), registration.request(),
-                registration.getPriority(), registration.getLockMillis()
+                registration.target(), registration, registration.request(),
+                registration.getPriority(), registration.getLockMillis(),
+                persistent, persistent && registration.deferOneShot()
         );
         if (accepted) {
             registration.markRegistered();

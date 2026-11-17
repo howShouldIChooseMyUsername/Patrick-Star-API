@@ -1,8 +1,8 @@
 package comvyne.patrickstar.consumers;
 
-import comvyne.patrickstar.api.Patric;
-import comvyne.patrickstar.api.PatricPath;
-import comvyne.patrickstar.api.PatricPathRegistry;
+import comvyne.patrickstar.api.Patrick;
+import comvyne.patrickstar.api.PatrickPath;
+import comvyne.patrickstar.api.PatrickPathRegistry;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -72,18 +72,18 @@ public final class AlphaConsumerMod implements ModInitializer {
                 BlockPos destination = start.offset(14, 0, 0);
                 LOG.info("PCONSUMER ALPHA REQUEST start={} waypoint={} destination={} current={}",
                         start, firstWaypoint, destination, cow.position());
-                PatricPathRegistry request = Patric.create(cow, mob -> {
+                PatrickPathRegistry request = Patrick.create(cow, mob -> {
                     state.factoryCalls++;
                     mob.addTag(FACTORY_TAG);
                     LOG.info("PCONSUMER ALPHA FACTORY count={} waypoint={} destination={}",
                             state.factoryCalls, firstWaypoint, destination);
-                    return PatricPath.builder(destination)
+                    return PatrickPath.builder(destination)
                             .waypoint(Vec3.atBottomCenterOf(firstWaypoint))
                             .speed(0.72)
                             .reachable(true)
                             .build();
                 }).priority(100).lock(1800);
-                boolean accepted = Patric.register(request);
+                boolean accepted = Patrick.oneShot(request);
                 if (accepted) {
                     cow.addTag(REGISTERED_TAG);
                 }

@@ -19,5 +19,8 @@ public final class PatrickStarMod implements ModInitializer {
         if (java.nio.file.Files.isRegularFile(java.nio.file.Path.of("patrick-overload-runtime.enabled"))) {
             PatrickOverloadRuntimeProbe.initialize();
         }
+        if (java.nio.file.Files.isRegularFile(java.nio.file.Path.of("patrick-lifecycle-runtime.enabled"))) {
+            PatrickLifecycleRuntimeProbe.initialize();
+        }
     }
 }

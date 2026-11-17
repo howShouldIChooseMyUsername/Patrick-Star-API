@@ -1,17 +1,25 @@
-# Patrick Star API V1.0.0
+# Patrick Star API V2.0.0
 
-The first public release of Patrick Star API for **Minecraft 26.3 (Fabric)**.
-
-Patrick Star API lets multiple participating mods request navigation for the same mob without competing over its movement controls. Keep your own pathfinding logic; Patrick takes care of scheduling the requests.
+Patrick Star API **V2.0.0** for **Minecraft 26.3 (Fabric)** introduces persistent mob navigation behaviors and event-driven one-shot requests. This is a **breaking public API update** from V1.0.0.
 
 ## Highlights
 
-- **Simple API:** create and register navigation requests through `Patric.create(...)` and `Patric.register(...)`.
-- **Use existing paths:** submit a destination (`BlockPos` or `Vec3`), a vanilla `Path`, or a lazy `Supplier<Path>`.
-- **Bring your own algorithm:** use `NavigationSession` to submit ordered `follow` and `moveTo` commands.
-- **Priority-based scheduling:** support for reachability, route distance, registration order, timed locks, preemption, and resumption.
-- **Compatible waypoint builder:** existing `PatricPath` requests continue to work.
-- **One coordinator per mob:** a single internal MOVE goal manages participating navigation requests.
+- **Persistent `Patrick.register(handle)`:** registers a passive navigation behavior that remains active across route completions. Dynamic factories can calculate the next route without re-registering.
+- **Event-driven `Patrick.oneShot(handle)`:** submits a single-run path request; completed or failed one-shots are removed automatically.
+- **`Patrick.unregister(handle)`:** cancels an active or queued registration using the original `PatrickPathRegistry` handle.
+- **`deferOneShot(boolean)`:** defaults to `false`, allowing one-shots to interrupt a passive route after its lock expires. Set to `true` to defer one-shots until the passive route completes.
+- **Shared arbitration:** higher priority, reachability, shorter remaining route, then FIFO order within each request category. One-shots get a turn before the next passive route; paused passive work can resume.
+- **Navigation ownership fix:** switching routes releases the previously owned path correctly even when vanilla path evaluation updates the navigation target.
+- **Existing six `create` overloads retained:** `BlockPos`, `Vec3`, vanilla `Path`, `Supplier<Path>`, `Function<Mob, PatrickPath>`, and `BiConsumer<Mob, NavigationSession>`.
+
+## Breaking changes / migration from V1.0.0
+
+1. Rename Java imports and types: `Patric` → `Patrick`, `PatricPath` → `PatrickPath`, and `PatricPathRegistry` → `PatrickPathRegistry`. The Java package **`comvyne.patrickstar.api`** and Fabric mod ID **`patrick_star_api`** are unchanged.
+2. `register(...)` **no longer means one run**. If you previously registered a path for a one-time event, call `Patrick.oneShot(...)` instead.
+3. For ongoing patrol or other passive behavior, use `Patrick.register(...)`. Save the returned `PatrickPathRegistry` from `Patrick.create(...)` so you can call `Patrick.unregister(handle)` when that behavior is no longer needed.
+4. Update the JitPack dependency to **`com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.0`**, and the Fabric Loader dependency to `patrick_star_api >=2.0.0`.
+
+These names and behavior changes are not binary-compatible with the V1.0.0 public API: rebuild consumer mods with V2.0.0.
 
 ## Requirements
 
@@ -20,18 +28,16 @@ Patrick Star API lets multiple participating mods request navigation for the sam
 - Fabric API **0.166.2+26.3** or newer compatible build
 - Java **25**
 
-The Fabric mod ID is `patrick_star_api`. The public Java API is in `comvyne.patrickstar.api`.
-
 ## Downloads
 
-- **`patrick-star-api-1.0.0+26.3.jar`** — install this in your Fabric mods folder when another mod requires Patrick Star API.
-- **`patrick-star-api-1.0.0+26.3-sources.jar`** — source archive for developers, not a runtime mod.
-- **`SHA256SUMS.txt`** — checksums for the attached JARs.
+- **`patrick-star-api-2.0.0+26.3.jar`** — runtime Fabric mod JAR.
+- **`patrick-star-api-2.0.0+26.3-sources.jar`** — sources for developers (not a runtime mod).
+- **`SHA256SUMS.txt`** — SHA-256 hashes for both JARs.
 
 ## Verification
 
-The project has passed 17 JUnit tests, four dedicated-server checks for the public overloads, 18 regression checks for waypoint navigation, and seven integration checks involving two independent Fabric consumer mods.
+The release passed **20/20 JUnit tests**, **4/4 real-Mob dedicated-server lifecycle tests** covering one-shot interruption and return to passive navigation, deferral, equal-priority one-shot ordering, persistent route regeneration, and unregister cleanup; **4/4** overload tests; **18/18** original waypoint regression checks adapted for one-shot semantics; and **7/7** integration checks with two independently loaded Fabric consumer mods. All server checks were rerun against `2.0.0+26.3`. Full build and JAR verification passed.
 
-**Limitations:** Coordination applies to mods using the Patrick API; it does not automatically override navigation issued directly by unrelated mods. Cross-dimension behavior and dynamic callback regeneration after preemption have not been fully tested.
+**Limitations:** Arbitration applies only to mods that submit work through Patrick; it cannot reliably override unrelated mods that directly manipulate `PathNavigation`. Cross-dimension behavior, third-party AI interactions, and extended load tests have not been exhaustively verified.
 
-See the [README](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API#readme) for usage examples and [QA_REPORT.md](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/blob/main/QA_REPORT.md) for test details.
+See the [README](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API#readme) for usage and [QA_REPORT.md](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/blob/main/QA_REPORT.md) for verification details.

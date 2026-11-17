@@ -34,21 +34,21 @@ final class NavigationOverloadTest {
     }
 
     private static void assertCreateOverload(Class<?> secondArgument) throws NoSuchMethodException {
-        Method create = Patric.class.getMethod("create", Mob.class, secondArgument);
+        Method create = Patrick.class.getMethod("create", Mob.class, secondArgument);
         assertTrue(Modifier.isPublic(create.getModifiers()));
         assertTrue(Modifier.isStatic(create.getModifiers()));
-        assertEquals(PatricPathRegistry.class, create.getReturnType());
+        assertEquals(PatrickPathRegistry.class, create.getReturnType());
     }
 
     @Test
     void typedMethodReferencesSelectAllSixOverloads() {
         // Method references must resolve without casts at their invocation sites.
-        BiFunction<Mob, BlockPos, PatricPathRegistry> block = Patric::create;
-        BiFunction<Mob, Vec3, PatricPathRegistry> vector = Patric::create;
-        BiFunction<Mob, Path, PatricPathRegistry> nativePath = Patric::create;
-        BiFunction<Mob, Supplier<Path>, PatricPathRegistry> suppliedPath = Patric::create;
-        BiFunction<Mob, BiConsumer<Mob, NavigationSession>, PatricPathRegistry> session = Patric::create;
-        BiFunction<Mob, Function<Mob, PatricPath>, PatricPathRegistry> legacy = Patric::create;
+        BiFunction<Mob, BlockPos, PatrickPathRegistry> block = Patrick::create;
+        BiFunction<Mob, Vec3, PatrickPathRegistry> vector = Patrick::create;
+        BiFunction<Mob, Path, PatrickPathRegistry> nativePath = Patrick::create;
+        BiFunction<Mob, Supplier<Path>, PatrickPathRegistry> suppliedPath = Patrick::create;
+        BiFunction<Mob, BiConsumer<Mob, NavigationSession>, PatrickPathRegistry> session = Patrick::create;
+        BiFunction<Mob, Function<Mob, PatrickPath>, PatrickPathRegistry> legacy = Patrick::create;
 
         assertNotNull(block);
         assertNotNull(vector);
@@ -63,16 +63,16 @@ final class NavigationOverloadTest {
         // The null entity is intentionally rejected before any callback can run.
         // This tests Java overload resolution without mocking Minecraft game objects.
         Mob missing = null;
-        assertThrows(NullPointerException.class, () -> Patric.create(missing, BlockPos.ZERO));
+        assertThrows(NullPointerException.class, () -> Patrick.create(missing, BlockPos.ZERO));
         assertThrows(NullPointerException.class,
-                () -> Patric.create(missing, new Vec3(0.5, 64, 0.5)));
-        assertThrows(NullPointerException.class, () -> Patric.create(missing, (Path) null));
+                () -> Patrick.create(missing, new Vec3(0.5, 64, 0.5)));
+        assertThrows(NullPointerException.class, () -> Patrick.create(missing, (Path) null));
         assertThrows(NullPointerException.class,
-                () -> Patric.create(missing, () -> (Path) null));
+                () -> Patrick.create(missing, () -> (Path) null));
         assertThrows(NullPointerException.class,
-                () -> Patric.create(missing, mob -> PatricPath.builder(BlockPos.ZERO).build()));
+                () -> Patrick.create(missing, mob -> PatrickPath.builder(BlockPos.ZERO).build()));
         assertThrows(NullPointerException.class,
-                () -> Patric.create(missing, (mob, session) -> {
+                () -> Patrick.create(missing, (mob, session) -> {
                     session.follow((Path) null, 1.0);
                     session.moveTo(BlockPos.ZERO, 1.0);
                     session.moveTo(new Vec3(0.5, 64, 0.5), 1.0);

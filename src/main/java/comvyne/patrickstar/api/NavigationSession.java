@@ -25,7 +25,7 @@ public final class NavigationSession {
     private final List<PathDirector.Step> commands = new ArrayList<>();
     private boolean closed;
 
-    // Created only by Patric when it invokes a user-supplied callback.
+    // Created only by Patrick when it invokes a user-supplied callback.
     NavigationSession() {
     }
 
