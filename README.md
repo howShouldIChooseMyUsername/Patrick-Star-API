@@ -149,9 +149,17 @@ Among one-shots, a request with the **same priority** won't interrupt one alread
 
 Each mob is coordinated separately. Failed one-shot providers are discarded without stopping unrelated requests. Persistent providers that temporarily have no route retry later instead of losing their registration; a failed movement run is also retried with a delay. A persistent behavior remains until `unregister`, mob unload/death, or server shutdown.
 
-## Adding Patrick to a mod
+## Installing Patrick Star API V2.0.0
 
-Use the [V2.0.0 release](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/releases/tag/V2.0.0) through JitPack. The release targets Minecraft 26.3 and Java 25. The JitPack version is the Git tag **`V2.0.0`**, not the mod version `2.0.0+26.3`.
+The installation examples in this section target the **[V2.0.0 release](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/releases/tag/V2.0.0)** for Minecraft 26.3 and Java 25. Use these exact versions when adding Patrick to your mod:
+
+| Setting | V2.0.0 value |
+| --- | --- |
+| JitPack dependency | `com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.0` |
+| Fabric mod dependency (`patrick_star_api`) | `>=2.0.0` |
+| Runtime JAR | `patrick-star-api-2.0.0+26.3.jar` |
+
+**Important:** JitPack uses the Git tag `V2.0.0`, while Fabric Loader checks the mod version `2.0.0+26.3`. Both Gradle and Fabric Amper examples below use V2.0.0.
 
 ### Fabric Loom (Gradle Kotlin DSL)
 
