@@ -1,6 +1,6 @@
 # Patrick Star API — Minecraft Fabric 26.3 길찾기 중재 API
 
-상태: 공개 API 확장 명세 v3 (2026-11-17), **릴리스 V2.0.0 대상**. v2의 기존 경로 중재를 기반으로 지속형 `register`와 단발형 `oneShot`, `unregister`, `deferOneShot`을 확장한다. 아래 v2 실측 수치는 역사적 기록이며 새 v3 실측은 QA_REPORT.md에 별도 기록한다. 공개 릴리스 V1.0.0에는 v3 기능이 포함되지 않는다.
+상태: 공개 API 확장 명세 v3 (2026-11-17), **최신 릴리스 V2.0.1 (JavaDoc 보강)**. v2의 기존 경로 중재를 기반으로 지속형 `register`와 단발형 `oneShot`, `unregister`, `deferOneShot`을 확장한다. 아래 v2 실측 수치는 역사적 기록이며 새 v3 실측은 QA_REPORT.md에 별도 기록한다. 공개 릴리스 V1.0.0에는 v3 기능이 포함되지 않는다.
 
 ## 1. 프로젝트 목표
 
@@ -102,7 +102,7 @@ boolean accepted = Patrick.register(request);
 | Fabric API | "0.166.2+26.3" (2026-11-11 공개) |
 | Java / Kotlin | release: 25 / enabled: false |
 | 테스트 | org.junit.jupiter:junit-jupiter:6.0.0 |
-| 예제 Maven 좌표 | comvyne.patrickstar:patrick-star-api:2.0.0+26.3 |
+| 예제 Maven 좌표 | comvyne.patrickstar:patrick-star-api:2.0.1+26.3 |
 
 Maven group과 archive 이름은 이 로컬 프로젝트의 식별자일 뿐 외부 네임스페이스 소유 또는 원격 게시가 아니다. API의 entrypoint는 comvyne.patrickstar.internal.PatrickStarMod, 공개 서비스·데이터 클래스는 comvyne.patrickstar.api 패키지에 둔다. Fabric Amper가 Loader JSON을 자동 생성하고 최종 JAR 루트에는 fabric.mod.json이 정확히 하나 있어야 한다. Fabric API/Loader의 기본 의존은 minecraft.fabricApi/loader로 구성하며 별도 build.gradle 설정이나 수동 metadata를 만들지 않는다. publish 작업은 별도 명시적 사용자 지시 없이는 실행하지 않는다.
 

@@ -14,16 +14,30 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * Navigation request creation, continuous registration and one-shot dispatch.
- * All navigation requests are processed on the owning server thread.
+ * Entry point for coordinating navigation requests from participating mods.
+ * Create a request with one of the {@code create} overloads, configure its
+ * {@linkplain PatrickPathRegistry#priority(int) priority} and optional lock,
+ * then submit it with {@link #register(PatrickPathRegistry)} or
+ * {@link #oneShot(PatrickPathRegistry)}.
+ * Operations must take place on the owning Minecraft server thread. Patrick
+ * coordinates only requests submitted through this API.
  */
 public final class Patrick {
     private Patrick() {
     }
 
     /**
-     * Creates an unregistered navigation request.
-     * The callback is evaluated when the server arbitrates this request.
+     * Creates an unsubmitted request backed by a waypoint route factory.
+     * The factory runs lazily during arbitration and can provide a new route
+     * for each cycle of a persistent registration. A null route or a failed
+     * factory is handled as an unsuccessful evaluation.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param pathFactory function producing a route for the mob
+     * @return a new, configurable, single-use handle; no movement is scheduled yet
+     * @throws NullPointerException if either argument is null
+     * @see PatrickPath#builder(BlockPos)
+     * @see #register(PatrickPathRegistry)
      */
     public static PatrickPathRegistry create(Mob targetEntity, Function<Mob, PatrickPath> pathFactory) {
         return new PatrickPathRegistry(
@@ -32,7 +46,17 @@ public final class Patrick {
         );
     }
 
-    /** Register a vanilla destination with default speed 1.0 and no path builder. */
+    /**
+     * Creates an unsubmitted request to navigate to the bottom center of a block
+     * using vanilla pathfinding at speed {@code 1.0}. The position is captured
+     * at creation time.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param destination fixed block destination
+     * @return a new, configurable, single-use handle
+     * @throws NullPointerException if either argument is null
+     * @see #create(Mob, Vec3)
+     */
     public static PatrickPathRegistry create(Mob targetEntity, BlockPos destination) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         BlockPos pos = Objects.requireNonNull(destination, "destination").immutable();
@@ -41,7 +65,16 @@ public final class Patrick {
                         List.of(new PathDirector.Point(Vec3.atBottomCenterOf(pos), 1.0)), null), false, false));
     }
 
-    /** Register a precise destination with default speed 1.0 and no path builder. */
+    /**
+     * Creates an unsubmitted request to navigate to a fixed world-space point
+     * using vanilla pathfinding at speed {@code 1.0}.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param destination precise destination in world coordinates
+     * @return a new, configurable, single-use handle
+     * @throws NullPointerException if either argument is null
+     * @see #create(Mob, BlockPos)
+     */
     public static PatrickPathRegistry create(Mob targetEntity, Vec3 destination) {
         Objects.requireNonNull(targetEntity, "targetEntity");
         Vec3 point = Objects.requireNonNull(destination, "destination");
@@ -51,9 +84,17 @@ public final class Patrick {
     }
 
     /**
-     * Accept a precomputed vanilla Path; the coordinator retains the original
-     * and plays a defensive copy to avoid changing the caller's cursor.
-     * Prefer the Supplier overload if the Mob may move before activation.
+     * Creates an unsubmitted request from a precomputed vanilla path at speed
+     * {@code 1.0}. The path's nodes and cursor are copied at creation time;
+     * execution does not advance the caller's original path.
+     * Prefer the supplier overload if the mob may move before activation.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param path precomputed vanilla path, with at most 4096 nodes
+     * @return a new, configurable, single-use handle
+     * @throws NullPointerException if an argument, path node or path target is null
+     * @throws IllegalArgumentException if the path exceeds the supported node limit
+     * @see #create(Mob, Supplier)
      */
     public static PatrickPathRegistry create(Mob targetEntity, Path path) {
         Objects.requireNonNull(targetEntity, "targetEntity");
@@ -67,8 +108,16 @@ public final class Patrick {
     }
 
     /**
-     * Generate a fresh native Path when the request is considered for
-     * arbitration. This supplier is also invoked on resume after preemption.
+     * Creates an unsubmitted request that lazily obtains a vanilla path at
+     * speed {@code 1.0}. The supplier may be called again after preemption
+     * or during subsequent persistent route cycles. A null path is treated
+     * as an unsuccessful evaluation.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param pathFactory supplier of the native path to copy and execute
+     * @return a new, configurable, single-use handle
+     * @throws NullPointerException if either argument is null
+     * @see #create(Mob, Path)
      */
     public static PatrickPathRegistry create(Mob targetEntity, Supplier<Path> pathFactory) {
         Objects.requireNonNull(targetEntity, "targetEntity");
@@ -81,11 +130,19 @@ public final class Patrick {
     }
 
     /**
-     * Run existing pathfinding code inside a command-capture callback.
-     * The NavigationSession records follow/moveTo commands; it cannot take
-     * ownership of Mob navigation until Patrick selects this request.
+     * Creates an unsubmitted request backed by a lazy command-capture callback.
+     * {@link NavigationSession} records ordered movement commands without
+     * starting movement until Patrick selects the request.
      *
-     * The callback may be re-invoked after a preempted request resumes.
+     * The callback may be invoked again after preemption or on later persistent
+     * route cycles. Do not retain the session after the callback returns, or
+     * directly change the mob's vanilla navigation inside the callback.
+     *
+     * @param targetEntity mob whose navigation will be coordinated
+     * @param pathAction callback receiving the mob and its temporary session
+     * @return a new, configurable, single-use handle
+     * @throws NullPointerException if either argument is null
+     * @see NavigationSession
      */
     public static PatrickPathRegistry create(Mob targetEntity,
                                             BiConsumer<Mob, NavigationSession> pathAction) {
@@ -117,24 +174,50 @@ public final class Patrick {
     }
 
     /**
-     * Register a persistent navigation behavior. It remains registered across
-     * route completions until explicitly unregistered or its Mob unloads.
-     * @return true if accepted for scheduling, not a statement of route success
+     * Submits a persistent navigation behavior. Dynamic routes can be recalculated
+     * after completion; fixed routes rest after arrival until the mob moves away.
+     * The behavior remains registered until cancellation, mob removal/death,
+     * a change of level, or server shutdown. Acceptance freezes the handle.
+     *
+     * @param registration unsubmitted handle created by a {@code create} overload
+     * @return {@code true} if accepted for scheduling, not if the route succeeds;
+     *         {@code false} for null, already accepted or otherwise rejected
+     *         requests (including invalid mobs, wrong threads and full queues)
+     * @see #oneShot(PatrickPathRegistry)
+     * @see #unregister(PatrickPathRegistry)
+     * @see PatrickPathRegistry#deferOneShot(boolean)
      */
     public static boolean register(PatrickPathRegistry registration) {
         return submit(registration, true);
     }
 
     /**
-     * Queue one navigation run, removed after it succeeds or fails. One-shots
-     * use the same path factories, priority, lock and arbitration as register.
-     * @return true if accepted for scheduling, not a statement of route success
+     * Submits a single navigation run, removed on completion or failure.
+     * One-shots take precedence over idle persistent behaviors and can preempt
+     * a non-deferring passive route after its lock expires. Only higher-priority
+     * one-shots can preempt a running one-shot after its lock expires.
+     * Acceptance freezes the handle.
+     *
+     * @param registration unsubmitted handle created by a {@code create} overload
+     * @return {@code true} if accepted for scheduling, not if the route succeeds;
+     *         {@code false} for null, already accepted or otherwise rejected requests
+     * @see #register(PatrickPathRegistry)
+     * @see #unregister(PatrickPathRegistry)
      */
     public static boolean oneShot(PatrickPathRegistry registration) {
         return submit(registration, false);
     }
 
-    /** Cancel an active or queued registration or one-shot using its original handle. */
+    /**
+     * Cancels an active or queued persistent behavior or one-shot using its
+     * original handle. Cancellation does not make a submitted handle reusable.
+     * The owning server thread must perform this operation.
+     *
+     * @param registration the original accepted handle
+     * @return {@code true} if a matching request was removed; {@code false} otherwise
+     * @see #register(PatrickPathRegistry)
+     * @see #oneShot(PatrickPathRegistry)
+     */
     public static boolean unregister(PatrickPathRegistry registration) {
         return registration != null && registration.registered()
                 && PathDirector.cancel(registration.target(), registration);

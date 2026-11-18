@@ -18,6 +18,9 @@ import java.util.Objects;
  *
  * A session becomes invalid after its callback returns. In particular, retaining
  * a session and invoking it from an asynchronous callback is not supported.
+ * Up to 1024 commands may be collected, in insertion order.
+ *
+ * @see Patrick#create(net.minecraft.world.entity.Mob, java.util.function.BiConsumer)
  */
 public final class NavigationSession {
     private static final int MAX_COMMANDS = 1024;
@@ -29,7 +32,17 @@ public final class NavigationSession {
     NavigationSession() {
     }
 
-    /** Enqueue a previously computed vanilla Path without converting its nodes. */
+    /**
+     * Appends a snapshot of a previously computed vanilla path. Its nodes and
+     * cursor are copied so executing the command does not modify the original.
+     *
+     * @param path native path with at most 4096 nodes
+     * @param speed positive finite navigation speed
+     * @return this session for chaining
+     * @throws IllegalStateException if the session has expired
+     * @throws NullPointerException if the path, a path node or its target is null
+     * @throws IllegalArgumentException if speed or path size is invalid, or the command limit is exceeded
+     */
     public NavigationSession follow(Path path, double speed) {
         ensureOpen();
         validateSpeed(speed);
@@ -37,14 +50,35 @@ public final class NavigationSession {
         return this;
     }
 
-    /** Enqueue vanilla pathfinding to a block position. */
+    /**
+     * Appends a command to navigate to the bottom center of a block.
+     * Vanilla pathfinding is performed when the command executes.
+     *
+     * @param destination block destination
+     * @param speed positive finite navigation speed
+     * @return this session for chaining
+     * @throws IllegalStateException if the session has expired
+     * @throws NullPointerException if the destination is null
+     * @throws IllegalArgumentException if speed is invalid or the command limit is exceeded
+     * @see #moveTo(Vec3, double)
+     */
     public NavigationSession moveTo(BlockPos destination, double speed) {
         ensureOpen();
         validateSpeed(speed);
         return moveTo(Vec3.atBottomCenterOf(Objects.requireNonNull(destination, "destination")), speed);
     }
 
-    /** Enqueue vanilla pathfinding to a world-space point. */
+    /**
+     * Appends a command to navigate to a precise point in world coordinates.
+     * Vanilla pathfinding is performed when the command executes.
+     *
+     * @param destination point with finite coordinates
+     * @param speed positive finite navigation speed
+     * @return this session for chaining
+     * @throws IllegalStateException if the session has expired
+     * @throws NullPointerException if the destination is null
+     * @throws IllegalArgumentException if coordinates or speed are invalid, or the command limit is exceeded
+     */
     public NavigationSession moveTo(Vec3 destination, double speed) {
         ensureOpen();
         validateSpeed(speed);

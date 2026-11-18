@@ -149,17 +149,17 @@ Among one-shots, a request with the **same priority** won't interrupt one alread
 
 Each mob is coordinated separately. Failed one-shot providers are discarded without stopping unrelated requests. Persistent providers that temporarily have no route retry later instead of losing their registration; a failed movement run is also retried with a delay. A persistent behavior remains until `unregister`, mob unload/death, or server shutdown.
 
-## Installing Patrick Star API V2.0.0
+## Installing Patrick Star API V2.0.1
 
-The installation examples in this section target the **[V2.0.0 release](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/releases/tag/V2.0.0)** for Minecraft 26.3 and Java 25. Use these exact versions when adding Patrick to your mod:
+The installation examples in this section target the **[V2.0.1 release](https://github.com/howShouldIChooseMyUsername/Patrick-Star-API/releases/tag/V2.0.1)** for Minecraft 26.3 and Java 25. Use these exact versions when adding Patrick to your mod:
 
-| Setting | V2.0.0 value |
+| Setting | V2.0.1 value |
 | --- | --- |
-| JitPack dependency | `com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.0` |
-| Fabric mod dependency (`patrick_star_api`) | `>=2.0.0` |
-| Runtime JAR | `patrick-star-api-2.0.0+26.3.jar` |
+| JitPack dependency | `com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.1` |
+| Fabric mod dependency (`patrick_star_api`) | `>=2.0.1` |
+| Runtime JAR | `patrick-star-api-2.0.1+26.3.jar` |
 
-**Important:** JitPack uses the Git tag `V2.0.0`, while Fabric Loader checks the mod version `2.0.0+26.3`. Both Gradle and Fabric Amper examples below use V2.0.0.
+**Important:** JitPack uses the Git tag `V2.0.1`, while Fabric Loader checks the mod version `2.0.1+26.3`. Both Gradle and Fabric Amper examples below use V2.0.1.
 
 ### Fabric Loom (Gradle Kotlin DSL)
 
@@ -179,7 +179,7 @@ Then add Patrick to `build.gradle.kts`:
 
 ~~~kotlin
 dependencies {
-    implementation("com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.0")
+    implementation("com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.1")
 }
 ~~~
 
@@ -191,7 +191,7 @@ Declare Patrick as a required mod in your `fabric.mod.json`:
 
 ~~~json
 "depends": {
-    "patrick_star_api": ">=2.0.0"
+    "patrick_star_api": ">=2.0.1"
 }
 ~~~
 
@@ -202,7 +202,7 @@ Keep your Fabric Amper `settings.gradle.kts` bootstrap (see [this project's exam
 ~~~yaml
 mod:
   depends:
-    patrick_star_api: ">=2.0.0"
+    patrick_star_api: ">=2.0.1"
 
 repositories:
   - fabric
@@ -210,7 +210,7 @@ repositories:
   - maven: "https://jitpack.io"
 
 dependencies:
-  - maven: "com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.0"
+  - maven: "com.github.howShouldIChooseMyUsername:Patrick-Star-API:V2.0.1"
     kind: mod
 ~~~
 
@@ -234,7 +234,7 @@ On Linux or macOS, use `./gradlew build`. If you have the Fabric Amper batch lau
 ..\fabric-amper.bat build
 ~~~
 
-The compiled library and sources JAR are written to `build/libs/`. The V2.0.0 release is built as `patrick-star-api-2.0.0+26.3.jar`.
+The compiled library and sources JAR are written to `build/libs/`. The V2.0.1 release is built as `patrick-star-api-2.0.1+26.3.jar`.
 
 ## Testing
 
@@ -246,6 +246,6 @@ The current Minecraft 26.3 build has been tested on a real dedicated server:
 - **18/18** original waypoint and navigation arbitration regression checks, adapted to the v2 one-shot API
 - **7/7** integration checks with two independently loaded Fabric consumer mods using v2 on the same cow
 
-All the above test groups were rerun for **2.0.0+26.3**. See `QA_REPORT.md` for details and earlier version history.
+The server test groups above were rerun for **2.0.0+26.3**. V2.0.1 is a documentation-only API patch; its clean build, JUnit tests and JavaDoc generation were verified separately. See `QA_REPORT.md` for details.
 
 Those tests cover the common navigation and arbitration paths, not every possible AI interaction. In particular, unrelated mods that overwrite `PathNavigation` directly, cross-dimension behavior, and dynamic callback regeneration after preemption still need more testing.

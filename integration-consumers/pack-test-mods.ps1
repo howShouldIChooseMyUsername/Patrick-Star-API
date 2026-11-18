@@ -55,7 +55,7 @@ foreach ($mod in $mods) {
             fabricloader = '>=0.20.1'
             minecraft = '26.3'
             'fabric-api' = '>=0.166.2'
-            patrick_star_api = '>=2.0.0+26.3'
+            patrick_star_api = '>=2.0.1+26.3'
         }
     }
     $json = $metadata | ConvertTo-Json -Depth 8

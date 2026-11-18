@@ -217,3 +217,12 @@ SHA-256:
 - **최종 변경 버전의 실제 MC26.3 전용 서버에서 모두 새로 실행:** `run/patrick-lifecycle-runtime-results.txt` **PLIFECYCLE 4/4 PASS**, `run/patrick-overload-runtime-results.txt` **POVERLOAD 4/4 PASS**, `run/patrick-dual-consumer-results.txt` **PCROSS 7/7 PASS** (실제 Loader가 `patrick_probe_alpha`/`patrick_probe_beta` 별도 ID로 로드), `run/patrick-runtime-smoke-results.txt` **PTEST 18/18 PASS**. 모두 FAIL=0으로 확인했으며, 서버 시작 로그에서 `patrick_star_api 2.0.0+26.3` 로드를 확인했다. 서버는 각각 콘솔 `stop`으로 정상 종료했고, 테스트 활성화 마커와 `run/mods`에 설치했던 별도 소비자 JAR 2개는 제거했다.
 - 배포 JAR: `build/libs/patrick-star-api-2.0.0+26.3.jar`, SHA-256 **CFC592400EFA9771F340B1EC1B0743020DCB6206463FA5A335786983CF520D08**. 소스 JAR: `build/libs/patrick-star-api-2.0.0+26.3-sources.jar`, SHA-256 **99F93392E1DDEC8B1788F8DF1ABCB66376CC5062F7394D39BBDED19F9156C0CD**. 런타임 JAR는 루트 `fabric.mod.json` 한 개와 새 `Patrick.class`/`PatrickPath.class`/`PatrickPathRegistry.class`를 포함하며 이전 `Patric*.class`는 포함하지 않는다.
 - **비호환성:** 기존 V1.0.0의 `Patric` 공개 타입, 단발 의미의 `register`를 그대로 쓰는 소비자 모드는 V2.0.0에 맞게 import와 등록 코드를 수정하고 재컴파일해야 한다. Fabric 모드 ID `patrick_star_api`와 Java 패키지 `comvyne.patrickstar.api`는 유지한다.
+
+## V2.0.1 JavaDoc 패치 릴리스 검증 — 2026-11-18
+
+- 공개 API 타입 5개(`Patrick`, `PatrickPathRegistry`, `PatrickPath`, `PatrickPath.Builder`, `NavigationSession`)의 공개 메서드 25개 전체에 영문 JavaDoc을 작성했다. 매개변수, 반환값, 해당하는 예외, 기본값, 실행 시점, 서버 스레드 및 사용 수명 조건을 명시했다. Java 소스 변경은 JavaDoc 주석만이며 실행 코드와 공개 시그니처는 변경하지 않았다.
+- 모드 버전 `2.0.1+26.3`, JitPack 태그 `V2.0.1`, Loader 의존 예제 `>=2.0.1` 및 현재 설치/다운로드 경로를 갱신했다. V2.0.0 실측 기록과 기존 릴리스는 유지한다.
+- `.\gradlew.bat clean build javadoc --no-daemon --console=plain` **BUILD SUCCESSFUL** (33초): JUnit **20/20 PASS**, `verifyFabricAmperJar` PASS, 런타임 및 소스 JAR 생성, JavaDoc HTML 생성 PASS. 공개 API의 JavaDoc 경고는 없으며 기존 내부 구현 클래스에서 31개 경고가 발생했다. `build/docs/javadoc/comvyne/patrickstar/api/`에서 공개 타입 5개의 HTML을 확인했다.
+- `git diff -U0`의 API Java 변경분이 모두 주석인 것을 확인했다. JAR 엔트리 확인: 루트 `fabric.mod.json` 1개 및 공개 API 클래스 5개, 소스 JAR에 JavaDoc을 포함한 API 소스 4개. 이전 V2.0.0의 dedicated server 33개 검증은 동작 변경이 없는 이번 문서 패치에서 새로 실행하지 않았다.
+- 런타임 JAR `patrick-star-api-2.0.1+26.3.jar` SHA-256: **2226AE4E54545A5DC66C44C6191BAB39C4E308EAC3EA6F458745FA20C6B25CFC**.
+- 소스 JAR `patrick-star-api-2.0.1+26.3-sources.jar` SHA-256: **4D504F88A15224E85E94F781D129F6A5FC5A20F03F24A9C4008129A1B256D1D1**.
